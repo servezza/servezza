@@ -1,0 +1,119 @@
+## PLS CHANGE BEFORE USAGE:
+
+## Backend:
+#  - DATABASE_URL
+#  - BACKEND_PUBLIC_URL
+#  - JWT_SECRET - create with linux: head -c 32 /dev/urandom | base64  ||||| with windows: [Convert]::ToHexString((1..32 | % { Get-Random -Maximum 256 }))
+#  - ADMIN_USER
+#  - ADMIN_PASS
+#  - ALLOWED_ORIGINS
+#  - POSTGRES_PASSWORD
+#  - POSTGRES_USER
+#  - POSTGRES_DB
+## DB:
+#  - POSTGRES_PASSWORD
+#  - POSTGRES_USER
+#  - POSTGRES_DB
+services:
+  backend:
+    image: ghcr.io/servezza/servezza-backend:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://CHANGE_USERNAME:CHANGE_PASSWORD@db:5432/servezza"
+      BACKEND_PUBLIC_URL: "http://DOCKER_IP:8000"
+      JWT_SECRET: "replace_with_strong_secret"
+      ADMIN_USER: "CHANGE_USERNAME"
+      ADMIN_PASS: "CHANGE_PASSWORD"
+      ALLOWED_ORIGINS: "https://DOCKER_IP"
+      POSTGRES_PASSWORD: "CHANGE_PASSWORD"
+      POSTGRES_USER: "CHANGE_USERNAME"
+      POSTGRES_DB: "servezza"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - servezza-net
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport os,urllib.request,sys\nport=os.getenv('BACKEND_PORT') or os.getenv('PORT') or '8000'\nurl=f'http://127.0.0.1:{port}/api/health'\ntry:\n  sys.exit(0) if urllib.request.urlopen(url, timeout=3).getcode()==200 else sys.exit(1)\nexcept Exception:\n  sys.exit(1)\nPY"]      
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+
+  frontend:
+    image: ghcr.io/servezza/servezza-frontend:latest
+    restart: unless-stopped
+    networks:
+      - servezza-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: false 
+    tmpfs:
+      - /var/log/nginx:uid=101,gid=101
+      - /var/cache/nginx:uid=101,gid=101
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:80" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  nginx:
+    image: ghcr.io/servezza/servezza-nginx:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - servezza-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:80" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "servezza"
+      POSTGRES_USER: "CHANGE_USERNAME"
+      POSTGRES_PASSWORD: "CHANGE_PASSWORD"
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -h 127.0.0.1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    volumes:
+      - servezza_db_data:/var/lib/postgresql/data
+    networks:
+      - servezza-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+networks:
+  servezza-net:
+    driver: bridge
+
+volumes:
+  servezza_db_data:

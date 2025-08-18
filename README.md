@@ -30,6 +30,12 @@
 
 ---
 
+## Images
+![Servezza Dashboard](/images/servezza-dashboard.png)
+![Servezza Dashboard](images/servezza-dashboard2.png)
+![Software Overview](images/servezza-software.png)
+![Server Overview](images/servezza-server.png)
+
 ## System requirements
 
 ### Deployment host
